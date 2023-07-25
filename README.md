@@ -2,23 +2,13 @@
 
 This repository contains a [PyTorch](http://pytorch.org/) implementation for the paper: [Deep Pyramidal Residual Networks](https://arxiv.org/pdf/1610.02915.pdf) (CVPR 2017, Dongyoon Han*, Jiwhan Kim*, and Junmo Kim, (equally contributed by the authors*)). The code in this repository is based on the example provided in [PyTorch examples](https://github.com/pytorch/examples/tree/master/imagenet) and the nice implementation of [Densely Connected Convolutional Networks](https://github.com/andreasveit/densenet-pytorch).
 
-Two other implementations with [LuaTorch](http://torch.ch/) and [Caffe](http://caffe.berkeleyvision.org/) are provided:
-1. [A LuaTorch implementation](https://github.com/jhkim89/PyramidNet) for PyramidNets,
-2. [A Caffe implementation](https://github.com/jhkim89/PyramidNet-caffe) for PyramidNets.
-
 ## Usage examples
-To train additive PyramidNet-200 (alpha=300 with bottleneck) on ImageNet-1k dataset with 8 GPUs:
-```
-CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python train.py --data ~/dataset/ILSVRC/Data/CLS-LOC/ --net_type pyramidnet --lr 0.05 --batch_size 128 --depth 200 -j 16 --alpha 300 --print-freq 1 --expname PyramidNet-200 --dataset imagenet --epochs 100
-```
+
 To train additive PyramidNet-110 (alpha=48 without bottleneck) on CIFAR-10 dataset with a single-GPU:
 ```
-CUDA_VISIBLE_DEVICES=0 python train.py --net_type pyramidnet --alpha 64 --depth 110 --no-bottleneck --batch_size 32 --lr 0.025 --print-freq 1 --expname PyramidNet-110 --dataset cifar10 --epochs 300
+CUDA_VISIBLE_DEVICES=0 python train.py --net_type pyramidnet --alpha 64 --depth 110 --no-bottleneck --batch_size 32 --lr 0.025 --print-freq 1 --expname PyramidNet-110 --dataset cifar10 --epochs 30
 ```
-To train additive PyramidNet-164 (alpha=48 with bottleneck) on CIFAR-100 dataset with 4 GPUs:
-```
-CUDA_VISIBLE_DEVICES=0,1,2,3 python train.py --net_type pyramidnet --alpha 48 --depth 164 --batch_size 128 --lr 0.5 --print-freq 1 --expname PyramidNet-164 --dataset cifar100 --epochs 300
-```
+
 
 ### Notes
 1. This implementation contains the training (+test) code for add-PyramidNet architecture on ImageNet-1k dataset, CIFAR-10 and CIFAR-100 datasets.
