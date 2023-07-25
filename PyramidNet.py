@@ -119,7 +119,8 @@ class PyramidNet(nn.Module):
             else:
                 n = int((depth - 2) / 6)
                 block = BasicBlock
-
+            
+            # Formulation for each approach
             self.addrate = alpha / (3*n*1.0)
             self.multirate = alpha**(1/(3*n*1.0)) 
 
@@ -129,9 +130,17 @@ class PyramidNet(nn.Module):
             self.bn1 = nn.BatchNorm2d(self.input_featuremap_dim)
 
             self.featuremap_dim = self.input_featuremap_dim 
+
+            # Hybrid Layer PyramidNet  
+            self.layer1 = self.pyramidal_make_layer_multi(block, n)
+            self.layer2 = self.pyramidal_make_layer_add(block, n, stride=2)
+            self.layer3 = self.pyramidal_make_layer_multi(block, n, stride=2)
+
+            # Hybrid Units PyramidNet
             self.layer1 = self.pyramidal_make_layer(block, n)
             self.layer2 = self.pyramidal_make_layer(block, n, stride=2)
             self.layer3 = self.pyramidal_make_layer(block, n, stride=2)
+
 
             self.final_featuremap_dim = self.input_featuremap_dim
             self.bn_final= nn.BatchNorm2d(self.final_featuremap_dim)
@@ -183,6 +192,8 @@ class PyramidNet(nn.Module):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
 
+    # Hybrid units pyramidNet
+    # Function to checked different combination of change approches between different units
     def pyramidal_make_layer(self, block, block_depth, stride=1):
         downsample = None
         if stride != 1: # or self.inplanes != int(round(featuremap_dim_1st)) * block.outchannel_ratio:
@@ -191,17 +202,53 @@ class PyramidNet(nn.Module):
         layers = []
         self.featuremap_dim = self.featuremap_dim + self.addrate
         layers.append(block(self.input_featuremap_dim, int(round(self.featuremap_dim)), stride, downsample))
-        for i in range(1, 11):
+        for i in range(1, 9):
             temp_featuremap_dim = self.featuremap_dim * self.multirate
             layers.append(block(int(round(self.featuremap_dim)) * block.outchannel_ratio, int(round(temp_featuremap_dim)), 1))
             self.featuremap_dim  = temp_featuremap_dim
-        for i in range(12, block_depth):
+        for i in range(10, block_depth):
             temp_featuremap_dim = self.featuremap_dim + self.addrate
             layers.append(block(int(round(self.featuremap_dim)) * block.outchannel_ratio, int(round(temp_featuremap_dim)), 1))
             self.featuremap_dim  = temp_featuremap_dim
         self.input_featuremap_dim = int(round(self.featuremap_dim)) * block.outchannel_ratio
 
         return nn.Sequential(*layers)
+
+    # Hybrid layers pyramidNet
+    # Function to make a layer with additive formulation 
+    def pyramidal_make_layer_add(self, block, block_depth, stride=1):
+        downsample = None
+        if stride != 1: # or self.inplanes != int(round(featuremap_dim_1st)) * block.outchannel_ratio:
+            downsample = nn.AvgPool2d((2,2), stride = (2, 2), ceil_mode=True)
+
+        layers = []
+        self.featuremap_dim = self.featuremap_dim + self.addrate
+        layers.append(block(self.input_featuremap_dim, int(round(self.featuremap_dim)), stride, downsample))
+        for i in range(1, block_depth):
+            temp_featuremap_dim = self.featuremap_dim + self.addrate
+            layers.append(block(int(round(self.featuremap_dim)) * block.outchannel_ratio, int(round(temp_featuremap_dim)), 1))
+            self.featuremap_dim  = temp_featuremap_dim
+        self.input_featuremap_dim = int(round(self.featuremap_dim)) * block.outchannel_ratio
+
+        return nn.Sequential(*layers)
+    
+    # Function to make a layer with Multiplicative formulation 
+    def pyramidal_make_layer_multi(self, block, block_depth, stride=1):
+        downsample = None
+        if stride != 1: # or self.inplanes != int(round(featuremap_dim_1st)) * block.outchannel_ratio:
+            downsample = nn.AvgPool2d((2,2), stride = (2, 2), ceil_mode=True)
+
+        layers = []
+        self.featuremap_dim = self.featuremap_dim * self.multirate
+        layers.append(block(self.input_featuremap_dim, int(round(self.featuremap_dim)), stride, downsample))
+        for i in range(1, block_depth):
+            temp_featuremap_dim = self.featuremap_dim * self.multirate
+            layers.append(block(int(round(self.featuremap_dim)) * block.outchannel_ratio, int(round(temp_featuremap_dim)), 1))
+            self.featuremap_dim  = temp_featuremap_dim
+        self.input_featuremap_dim = int(round(self.featuremap_dim)) * block.outchannel_ratio
+
+        return nn.Sequential(*layers)
+
 
     def forward(self, x):
         if self.dataset == 'cifar10' or self.dataset == 'cifar100':
