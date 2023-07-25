@@ -142,8 +142,9 @@ def main():
             val_loader = torch.utils.data.DataLoader(
                 datasets.CIFAR100('../data', train=False, transform=transform_test),
                 batch_size=args.batch_size, shuffle=True, num_workers=args.workers, pin_memory=True) 
-            numberofclass = 100  
+            numberofclass = 100
 
+        # Subset of 'cifar10' dataSet
         elif args.dataset == 'cifar10':
             train_dataset = datasets.CIFAR10('../data', train=True, download=True, transform=transform_train)
             val_dataset = datasets.CIFAR10('../data', train=False, transform=transform_test)
@@ -309,6 +310,7 @@ def main():
             'optimizer' : optimizer.state_dict(),
         }, is_best)
     print ('Best accuracy (top-1 and 5 error):', best_err1, best_err5)  
+    # graph per epoch
     create_graph("Validation Top error rates per epoch", [str(i) for i in range(args.epochs+1)],
                  err_1_values, err_5_values, "epoch", "error (%)", "change_in_4_unit")
  
