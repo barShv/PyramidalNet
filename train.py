@@ -19,12 +19,31 @@ import preresnet as PRN
 import PyramidNet as PYRM
 from torch.utils.tensorboard import SummaryWriter
 from sklearn.model_selection import train_test_split
-
 from tensorboard_logger import configure, log_value
+import matplotlib.pyplot as plt
+from IPython.display import display
+
 
 model_names = sorted(name for name in models.__dict__
     if name.islower() and not name.startswith("__")
     and callable(models.__dict__[name]))
+
+def create_graph(title, x_value, y_values_1, y_values_2, x_axis_name, y_axis_name, graph_name):
+    save_path='/content/drive/MyDrive/pyramid/graphs'
+    if not os.path.exists(save_path):
+      os.makedirs(save_path)
+    plt.plot(x_value, y_values_1, color="darkviolet")
+    plt.plot(x_value, y_values_2, color="magenta")
+    plt.title(title, fontsize=12,  fontweight='bold')
+    plt.xlabel(x_axis_name)
+    plt.ylabel(y_axis_name)
+    plt.legend(["Top-1 error rates", "Top-5 error rates"])
+    plt.xticks([x_value[0], x_value[-1]])
+    if save_path is not None:
+      filename = os.path.join(save_path, f"{graph_name}.png")
+      plt.savefig(filename)
+    else:
+      plt.show()
 
 
 parser = argparse.ArgumentParser(description='PyTorch CIFAR-10, CIFAR-100 and ImageNet-1k Training')
@@ -83,11 +102,13 @@ parser.set_defaults(augment=True)
 
 best_err1 = 100
 best_err5 = 100
+err_1_values = []
+err_5_values = []
 
 def main():
     global args, best_err1, best_err5
     args = parser.parse_args()
-    #if args.tensorboard: configure("runs/%s"%(args.expname))
+    if args.tensorboard: configure("runs/%s"%(args.expname))
 
     args.distributed = args.world_size > 1
     if args.distributed:
@@ -121,7 +142,8 @@ def main():
             val_loader = torch.utils.data.DataLoader(
                 datasets.CIFAR100('../data', train=False, transform=transform_test),
                 batch_size=args.batch_size, shuffle=True, num_workers=args.workers, pin_memory=True) 
-            numberofclass = 100         
+            numberofclass = 100  
+
         elif args.dataset == 'cifar10':
             train_dataset = datasets.CIFAR10('../data', train=True, download=True, transform=transform_train)
             val_dataset = datasets.CIFAR10('../data', train=False, transform=transform_test)
@@ -131,14 +153,14 @@ def main():
             train_indices = list(range(len(train_labels)))
 
             # Split the indices stratified by the labels
-            _, subset_indices_train = train_test_split(train_indices, train_size=0.9, stratify=train_labels)
+            _, subset_indices_train = train_test_split(train_indices, train_size=0.8, stratify=train_labels)
 
             # Get the labels and indices from the original test dataset
             val_labels = val_dataset.targets
             val_indices = list(range(len(val_labels)))
 
             # Split the indices stratified by the labels
-            _, subset_indices_val = train_test_split(val_indices, train_size=0.9, stratify=val_labels)
+            _, subset_indices_val = train_test_split(val_indices, train_size=0.8, stratify=val_labels)
 
             # Create subsets based on the stratified indices
             train_subset = torch.utils.data.Subset(train_dataset, subset_indices_train)
@@ -221,19 +243,18 @@ def main():
     if not args.distributed:
         if args.net_type.startswith('alexnet') or args.net_type.startswith('vgg'):
             model.features = torch.nn.DataParallel(model.features)
-            #model.cuda()
+            model.cuda()
         else:
-            model = torch.nn.DataParallel(model) #.cuda()
-
+            model = torch.nn.DataParallel(model).cuda()
     else:
-        #model.cuda()
+        model.cuda()
         model = torch.nn.parallel.DistributedDataParallel(model)
 
     print(model)
     print('the number of model parameters: {}'.format(sum([p.data.nelement() for p in model.parameters()])))
 
     # define loss function (criterion) and optimizer
-    criterion = nn.CrossEntropyLoss()  #.cuda()
+    criterion = nn.CrossEntropyLoss().cuda()
 
     optimizer = torch.optim.SGD(model.parameters(), args.lr,
                                 momentum=args.momentum,
@@ -270,6 +291,8 @@ def main():
 
         # evaluate on validation set
         err1, err5 = validate(val_loader, model, criterion, epoch)
+        err_1_values.append(err1)
+        err_5_values.append(err5)
 
         # remember best prec@1 and save checkpoint
         is_best = err1 <= best_err1
@@ -286,13 +309,16 @@ def main():
             'optimizer' : optimizer.state_dict(),
         }, is_best)
     print ('Best accuracy (top-1 and 5 error):', best_err1, best_err5)  
+    create_graph("Validation Top error rates per epoch", [str(i) for i in range(args.epochs+1)],
+                 err_1_values, err_5_values, "epoch", "error (%)", "change_in_4_unit")
  
 
 def train(train_loader, model, criterion, optimizer, epoch):
     logging_dir = 'runs/pyramid_logs'
     os.makedirs(logging_dir, exist_ok=True)
     writer = SummaryWriter(logging_dir)
-
+    
+    
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
@@ -308,6 +334,7 @@ def train(train_loader, model, criterion, optimizer, epoch):
         # measure data loading time
         data_time.update(time.time() - end)
 
+        target = target.cuda()#async=True)
         input_var = torch.autograd.Variable(input)
         target_var = torch.autograd.Variable(target)
 
@@ -341,9 +368,10 @@ def train(train_loader, model, criterion, optimizer, epoch):
                    epoch, args.epochs, i, len(train_loader), LR=current_LR, batch_time=batch_time,
                    data_time=data_time, loss=losses, top1=top1, top5=top5))
     # log to TensorBoard
-    # if args.tensorboard:
-    #     log_value('train_loss', losses.avg, epoch)
-    #     log_value('train_error', top1.avg, epoch)
+    if args.tensorboard:
+        log_value('train_loss', losses.avg, epoch)
+        log_value('train_error', top1.avg, epoch)
+
     writer.add_scalar('train_loss', losses.avg, epoch)
     writer.add_scalar('train_error', top1.avg, epoch)
     writer.close()
@@ -352,7 +380,7 @@ def validate(val_loader, model, criterion, epoch):
     logging_dir = 'runs/pyramid_logs'
     os.makedirs(logging_dir, exist_ok=True)
     writer = SummaryWriter(logging_dir)
-
+    
     batch_time = AverageMeter()
     losses = AverageMeter()
     top1 = AverageMeter()
@@ -363,11 +391,9 @@ def validate(val_loader, model, criterion, epoch):
 
     end = time.time()
     for i, (input, target) in enumerate(val_loader):
-       #target = target.cuda(async=True)
-       #target = target.cuda()
-       #target = torch.empty(())
+        target = target.cuda()#async=True)
 
-    # for PyTorch 0.3.x, use volatile=True for preventing memory leakage in evaluation phase:`
+        # for PyTorch 0.3.x, use volatile=True for preventing memory leakage in evaluation phase:`
         input_var = torch.autograd.Variable(input, volatile=True)
         target_var = torch.autograd.Variable(target, volatile=True)
         output = model(input_var)
@@ -405,9 +431,11 @@ def validate(val_loader, model, criterion, epoch):
 
     print('* Epoch: [{0}/{1}]\t Top 1-err {top1.avg:.3f}  Top 5-err {top5.avg:.3f}\t Test Loss {loss.avg:.3f}'.format(epoch, args.epochs, top1=top1, top5=top5, loss=losses))
     # log to TensorBoard
-    # if args.tensorboard:
-    #     log_value('val_loss', losses.avg, epoch)
-    #     log_value('val_acc', top1.avg, epoch)
+    if args.tensorboard:
+        log_value('val_loss', losses.avg, epoch)
+        log_value('val_acc', top1.avg, epoch)
+
+
     writer.add_scalar('validation_loss', losses.avg, epoch)
     writer.add_scalar('validation_error', top1.avg, epoch)
     writer.close()
@@ -448,8 +476,8 @@ def adjust_learning_rate(optimizer, epoch):
     elif args.dataset == ('imagenet'):
         lr = args.lr * (0.1 ** (epoch // 30))
     
-    # if args.tensorboard:
-    #     log_value('learning_rate', lr, epoch)
+    if args.tensorboard:
+        log_value('learning_rate', lr, epoch)
 
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
@@ -480,19 +508,3 @@ def accuracy(output, target, topk=(1,)):
 
 if __name__ == '__main__':
     main()
-
-
-# import pickle
-# import pickletools
-#
-# with open('C://Users//barbi//PycharmProjects//PyramidalNet//runs//PyramidNet-110//checkpoint.pth//data.pkl', 'rb') as f:
-#     data = f.read()
-#
-# unpickler = pickle.Unpickler(f)
-# unpickler.find_class = pickletools._find_global  # Monkey-patch the unpickler to find classes
-# try:
-#     while True:
-#         obj = unpickler.load()
-#         print(type(obj))
-# except EOFError:
-#     pass
