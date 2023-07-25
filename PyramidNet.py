@@ -46,7 +46,7 @@ class BasicBlock(nn.Module):
         shortcut_channel = shortcut.size()[1]
 
         if residual_channel != shortcut_channel:
-            padding = torch.autograd.Variable(torch.FloatTensor(batch_size, residual_channel - shortcut_channel, featuremap_size[0], featuremap_size[1]).fill_(0))
+            padding = torch.autograd.Variable(torch.cuda.FloatTensor(batch_size, residual_channel - shortcut_channel, featuremap_size[0], featuremap_size[1]).fill_(0)) 
             out += torch.cat((shortcut, padding), 1)
         else:
             out += shortcut 
@@ -98,7 +98,7 @@ class Bottleneck(nn.Module):
         shortcut_channel = shortcut.size()[1]
 
         if residual_channel != shortcut_channel:
-            padding = torch.autograd.Variable(torch.FloatTensor(batch_size, residual_channel - shortcut_channel, featuremap_size[0], featuremap_size[1]).fill_(0))
+            padding = torch.autograd.Variable(torch.cuda.FloatTensor(batch_size, residual_channel - shortcut_channel, featuremap_size[0], featuremap_size[1]).fill_(0)) 
             out += torch.cat((shortcut, padding), 1)
         else:
             out += shortcut 
@@ -121,11 +121,13 @@ class PyramidNet(nn.Module):
                 block = BasicBlock
 
             self.addrate = alpha / (3*n*1.0)
+            self.multirate = alpha**(1/(3*n*1.0)) 
+
 
             self.input_featuremap_dim = self.inplanes
             self.conv1 = nn.Conv2d(3, self.input_featuremap_dim, kernel_size=3, stride=1, padding=1, bias=False)
             self.bn1 = nn.BatchNorm2d(self.input_featuremap_dim)
-            # pyramidal_make_layer(self, block, block_depth, stride=1)
+
             self.featuremap_dim = self.input_featuremap_dim 
             self.layer1 = self.pyramidal_make_layer(block, n)
             self.layer2 = self.pyramidal_make_layer(block, n, stride=2)
@@ -189,7 +191,11 @@ class PyramidNet(nn.Module):
         layers = []
         self.featuremap_dim = self.featuremap_dim + self.addrate
         layers.append(block(self.input_featuremap_dim, int(round(self.featuremap_dim)), stride, downsample))
-        for i in range(1, block_depth):
+        for i in range(1, 11):
+            temp_featuremap_dim = self.featuremap_dim * self.multirate
+            layers.append(block(int(round(self.featuremap_dim)) * block.outchannel_ratio, int(round(temp_featuremap_dim)), 1))
+            self.featuremap_dim  = temp_featuremap_dim
+        for i in range(12, block_depth):
             temp_featuremap_dim = self.featuremap_dim + self.addrate
             layers.append(block(int(round(self.featuremap_dim)) * block.outchannel_ratio, int(round(temp_featuremap_dim)), 1))
             self.featuremap_dim  = temp_featuremap_dim
